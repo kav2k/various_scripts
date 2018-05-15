@@ -1,4 +1,4 @@
-# Maintenance accouncement MOTD
+# Maintenance announcement MOTD
 
 A Python 3 script to accounce next maintenance in a dynamic MOTD.
 
