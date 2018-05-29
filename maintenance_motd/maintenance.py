@@ -138,7 +138,7 @@ try:
 
     extra = config.get("maintenance", "extra", fallback="")
     period = config.getint("config", "period")
-    highlight_period = config.getint("config", "highlight_period", fallback="0")
+    highlight_period = config.getint("config", "highlight_period", fallback=0)
 
     # Sanity check
     if start > end:
