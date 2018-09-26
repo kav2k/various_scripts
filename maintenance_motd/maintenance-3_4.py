@@ -41,22 +41,62 @@ else:
     CONFIG_FILE = "/etc/maintenance.conf"
 
 
-def print_message(start, end, remaining, extra):
-    print("Upcoming maintenance in {}, from {} to {}.".format(
+def datetime2str(dt, date=True):
+    if date:
+        return "{year:d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}".format(
+            year=dt.year,
+            month=dt.month,
+            day=dt.day,
+            hour=dt.hour,
+            minute=dt.minute
+        )
+    else:
+        return "{hour:02d}:{minute:02d}".format(
+            hour=dt.hour,
+            minute=dt.minute
+        )
+
+
+def print_upcoming(start, end, remaining, extra, highlight):
+    sequence = ""
+
+    if highlight:
+        sequence = "\033[31;1m"
+
+    start_string = datetime2str(start)
+    end_string = datetime2str(end, date=(start.date() == end.date()))
+
+    print("{}Upcoming maintenance in {}, from {} to {}.\033[0m".format(
+        sequence,
         estimate(remaining),
-        start.isoformat(sep=" "),
-        end.isoformat(sep=" ")
+        start_string,
+        end_string
+    ))
+
+    if len(extra):
+        if highlight:
+            sequence = "\033[31m"
+        print("\n{}{}\033[0m\n".format(sequence, extra))
+
+
+def print_ongoing(start, end, extra):
+    start_string = datetime2str(start)
+    end_string = datetime2str(end, date=(start.date() != end.date()))
+
+    print("\033[31;1;5mOngoing\033[25m maintenance from {} to {}.\033[0m".format(
+        start_string,
+        end_string
     ))
     if len(extra):
-        print(extra)
+        print("\n\033[31m{}\033[0m\n".format(extra))
 
 
 def estimate(interval):
     assert interval.total_seconds() >= 0
 
-    days = interval.total_seconds() // (360 * 24) / 10
-    hours = interval.total_seconds() // 360 / 10
-    minutes = interval.total_seconds() // 6 / 10
+    days = interval.total_seconds() // (360 * 24) / 10  # type: float
+    hours = interval.total_seconds() // 360 / 10  # type: float
+    minutes = interval.total_seconds() // 6 / 10  # type: float
     seconds = interval.total_seconds()
 
     def human_round(num):
@@ -67,14 +107,20 @@ def estimate(interval):
         else:
             return num
 
+    def plural(num):
+        if human_round(num) == 1:
+            return ""
+        else:
+            return "s"
+
     if days >= 1:
-        return "~{} day(s)".format(human_round(days))
+        return "~{} day{}".format(human_round(days), plural(days))
     elif hours >= 1:
-        return "~{} hour(s)".format(human_round(hours))
+        return "~{} hour{}".format(human_round(hours), plural(hours))
     elif minutes >= 1:
-        return "~{} minute(s)".format(human_round(minutes))
+        return "~{} minute{}".format(human_round(minutes), plural(minutes))
     else:
-        return "~{} second(s)".format(seconds)
+        return "~{} second{}".format(seconds, plural(seconds))
 
 
 try:
@@ -87,18 +133,26 @@ try:
     start = datetime.strptime(config.get("maintenance", "start"), "%Y-%m-%d %H:%M")
     end = datetime.strptime(config.get("maintenance", "end"), "%Y-%m-%d %H:%M")
     now = datetime.now()
-    remaining = start - now
+    remaining = start - now  # type: timedelta
 
     extra = config.get("maintenance", "extra", fallback="")
+    period = config.getint("config", "period")
+    highlight_period = config.getint("config", "highlight_period", fallback=0)
 
+    # Sanity check
     if start > end:
         raise ValueError("Start time older than end time")
 
+    # No maintenance scheduled
     if end < now:
         exit()
 
-    if remaining < timedelta(hours=config.getint("config", "period")):
-        print_message(start, end, remaining, extra)
+    if start < now:
+        print_ongoing(start, end, extra)
+    elif remaining < timedelta(hours=period):
+        highlight = remaining < timedelta(hours=highlight_period)
+        print_upcoming(start, end, remaining, extra, highlight=highlight)
+
 except ValueError as e:
     print("Error reading maintenance configuration: " + e.args[0], file=sys.stderr)
     exit(1)
